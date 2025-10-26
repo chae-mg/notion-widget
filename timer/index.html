@@ -1,1 +1,356 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="auto">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notion Timer Widget</title>
+  <style>
+    :root{
+      --bg: #f8fafc;            /* slate-50 */
+      --card: #ffffff;           /* white */
+      --text: #0f172a;           /* slate-900 */
+      --muted: #475569;          /* slate-600 */
+      --border: #e2e8f0;         /* slate-200 */
+      --accent: #2563eb;         /* blue-600 */
+      --accent-weak: #dbeafe;    /* blue-100 */
+      --shadow: 0 8px 24px rgba(2,6,23,0.06);
+    }
+    :root.dark{
+      --bg: #0b1220;            /* near-black */
+      --card: #0f172a;           /* slate-900 */
+      --text: #e5e7eb;           /* slate-200 */
+      --muted: #94a3b8;          /* slate-400 */
+      --border: #1f2937;         /* gray-800 */
+      --accent: #3b82f6;         /* blue-500 */
+      --accent-weak: #1e3a8a;    /* blue-900 */
+      --shadow: 0 8px 24px rgba(15,23,42,0.4);
+    }
 
+    /* Respect system preference when data-theme="auto" */
+    @media (prefers-color-scheme: dark) {
+      :root[data-theme="auto"] {
+        --bg: #0b1220; --card: #0f172a; --text: #e5e7eb; --muted: #94a3b8;
+        --border:#1f2937; --accent:#3b82f6; --accent-weak:#1e3a8a; --shadow: 0 8px 24px rgba(15,23,42,0.4);
+      }
+    }
+
+    html, body { height: 100%; }
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg); color: var(--text);
+      display:flex; align-items:center; justify-content:center;
+    }
+    .wrap{ width: 100%; max-width: 440px; padding: 16px; }
+    .card{
+      background: var(--card); border:1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow);
+      padding: 16px; overflow: hidden;
+    }
+    .row{ display:flex; align-items:center; justify-content:space-between; gap: 8px; }
+    .row.stack{ flex-wrap: wrap; }
+
+    .title{ font-weight:700; font-size: 16px; letter-spacing: 0.2px; }
+    .spacer{ height: 8px; }
+
+    .timer{
+      display:flex; align-items:baseline; justify-content:center; gap: 8px;
+      font-variant-numeric: tabular-nums; margin: 6px 0 10px;
+    }
+    .time{ font-size: 56px; line-height:1; font-weight: 800; }
+    .ms{ font-size: 14px; opacity: .7; }
+
+    .badge{
+      display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius: 999px;
+      background: var(--accent-weak); color: #0b3aa4; border:1px solid transparent; font-size: 12px; font-weight:600;
+    }
+    :root.dark .badge, :root[data-theme="auto"] .badge.dark {
+      color: #cbd5e1;
+    }
+
+    .seg{
+      display:inline-flex; background: transparent; border:1px solid var(--border); border-radius: 10px; padding:4px;
+    }
+    .seg button{
+      border:0; background:transparent; padding:8px 10px; border-radius: 8px; font-weight:600; cursor:pointer; color: var(--muted);
+    }
+    .seg button.active{ background: var(--accent-weak); color: var(--text); }
+
+    .chips{ display:flex; gap:8px; flex-wrap: wrap; }
+    .chip{ border:1px solid var(--border); background:transparent; color:var(--text); padding:6px 10px; border-radius: 999px; cursor:pointer; }
+    .chip:hover{ border-color: var(--accent); }
+
+    .controls{ display:flex; gap:8px; flex-wrap: wrap; }
+    .btn{
+      border:1px solid var(--border); background:var(--card); color:var(--text); padding:10px 14px; border-radius: 10px; cursor:pointer; font-weight:700;
+    }
+    .btn.primary{ background: var(--accent); color:#fff; border-color: transparent; }
+    .btn.ghost{ background: transparent; }
+
+    .grow{ flex:1; }
+    input[type="number"]{
+      width: 100%; box-sizing: border-box; border-radius: 10px; padding:10px 12px; border:1px solid var(--border); background: var(--card); color: var(--text);
+    }
+
+    footer{ margin-top: 10px; display:flex; justify-content:space-between; align-items:center; font-size:12px; color: var(--muted); }
+    a{ color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="row">
+        <div class="title">⏱️ Notion Timer</div>
+        <div class="row" role="group" aria-label="theme">
+          <button id="themeBtn" class="btn ghost" title="라이트/다크 전환">🌗</button>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="row stack" style="gap:10px; align-items: center;">
+        <div class="seg" role="tablist" aria-label="mode">
+          <button class="active" data-mode="pomodoro" role="tab" aria-selected="true">Pomodoro</button>
+          <button data-mode="countdown" role="tab" aria-selected="false">Countdown</button>
+          <button data-mode="stopwatch" role="tab" aria-selected="false">Stopwatch</button>
+        </div>
+        <span class="badge" id="status">정지</span>
+      </div>
+
+      <div class="timer" aria-live="polite">
+        <span class="time" id="time">25:00</span>
+        <span class="ms" id="ms"></span>
+      </div>
+
+      <div id="pomodoroPanel">
+        <div class="chips" aria-label="presets">
+          <button class="chip" data-min="25">집중 25m</button>
+          <button class="chip" data-min="5">짧은 휴식 5m</button>
+          <button class="chip" data-min="15">긴 휴식 15m</button>
+        </div>
+      </div>
+
+      <div id="countdownPanel" style="display:none;">
+        <div class="row">
+          <div class="grow">
+            <input id="customMin" type="number" min="1" max="999" value="10" aria-label="분" />
+          </div>
+          <button class="btn" id="setCustom">분 설정</button>
+        </div>
+      </div>
+
+      <div id="stopwatchPanel" style="display:none;">
+        <div style="font-size:12px; color:var(--muted);">경과 시간 측정</div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="controls">
+        <button class="btn primary grow" id="startPause">시작</button>
+        <button class="btn" id="reset">리셋</button>
+        <button class="btn ghost" id="mute">🔔 사운드</button>
+      </div>
+
+      <footer>
+        <span>파란색 테마 • 라이트/다크 지원</span>
+        <a href="https://github.com/" target="_blank" rel="noopener">GitHub Pages</a>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const $ = (s)=>document.querySelector(s);
+      const $$ = (s)=>Array.from(document.querySelectorAll(s));
+
+      // ---- Theme -----------------------------------------------------------
+      const THEME_KEY = 'ntw.theme';
+      const html = document.documentElement;
+      const savedTheme = localStorage.getItem(THEME_KEY);
+      if(savedTheme === 'light' || savedTheme === 'dark'){
+        html.classList.toggle('dark', savedTheme==='dark');
+        html.dataset.theme = 'manual';
+      } else {
+        html.dataset.theme = 'auto';
+      }
+      $('#themeBtn').addEventListener('click', ()=>{
+        const isDark = html.classList.toggle('dark');
+        html.dataset.theme = 'manual';
+        localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
+      });
+
+      // ---- Timer State -----------------------------------------------------
+      const MODE_KEY = 'ntw.mode';
+      const STATE_KEY = 'ntw.state.v1';
+      const DEFAULTS = { mode:'pomodoro', remaining: 25*60*1000, running:false, target:null, muted:false };
+      let state = { ...DEFAULTS };
+
+      // URL params: ?mode=pomodoro&work=25&short=5&long=15&countdown=10
+      const params = new URLSearchParams(location.search);
+
+      // Restore state
+      try{
+        const saved = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
+        if(saved && typeof saved === 'object') state = { ...state, ...saved };
+      }catch{}
+
+      // If tab was closed while running, recompute remaining
+      if(state.running && state.target){
+        const diff = Math.max(0, state.target - Date.now());
+        state.remaining = diff;
+        if(diff===0) state.running = false;
+      }
+
+      // ---- Elements --------------------------------------------------------
+      const timeEl = $('#time');
+      const msEl = $('#ms');
+      const statusEl = $('#status');
+      const startBtn = $('#startPause');
+      const resetBtn = $('#reset');
+      const muteBtn = $('#mute');
+      const segBtns = $$('.seg button');
+      const pomodoroPanel = $('#pomodoroPanel');
+      const countdownPanel = $('#countdownPanel');
+      const stopwatchPanel = $('#stopwatchPanel');
+
+      // ---- Helpers ---------------------------------------------------------
+      const fmt = (ms)=>{
+        const t = Math.max(0, Math.floor(ms/1000));
+        const m = Math.floor(t/60).toString().padStart(2,'0');
+        const s = (t%60).toString().padStart(2,'0');
+        return `${m}:${s}`;
+      };
+
+      function save(){ localStorage.setItem(STATE_KEY, JSON.stringify(state)); }
+
+      function setMode(mode){
+        state.mode = mode; save();
+        segBtns.forEach(b=>{
+          const active = b.dataset.mode===mode;
+          b.classList.toggle('active', active);
+          b.setAttribute('aria-selected', active ? 'true':'false');
+        });
+        pomodoroPanel.style.display = mode==='pomodoro'? 'block':'none';
+        countdownPanel.style.display = mode==='countdown'? 'block':'none';
+        stopwatchPanel.style.display = mode==='stopwatch'? 'block':'none';
+
+        if(mode==='stopwatch'){
+          if(!state.running && state.remaining===DEFAULTS.remaining){
+            state.remaining = 0; save();
+          }
+        } else if(mode==='pomodoro'){
+          if(state.remaining===0) state.remaining = (params.get('work')? Number(params.get('work')):25)*60*1000;
+        }
+        render();
+      }
+
+      function render(){
+        timeEl.textContent = fmt(state.remaining);
+        msEl.textContent = state.mode==='stopwatch' ? '' : '';
+        statusEl.textContent = state.running ? '진행 중' : '정지';
+        startBtn.textContent = state.running ? '일시정지' : '시작';
+        muteBtn.textContent = state.muted ? '🔕 사운드 꺼짐' : '🔔 사운드';
+      }
+
+      function start(){
+        if(state.running) return;
+        state.running = true;
+        state.target = Date.now() + (state.mode==='stopwatch' ? 86400000 : state.remaining);
+        tick();
+        save();
+      }
+      function pause(){
+        if(!state.running) return;
+        state.running = false;
+        state.remaining = Math.max(0, state.target - Date.now());
+        save();
+      }
+      function reset(toMs){
+        state.running = false;
+        state.target = null;
+        state.remaining = typeof toMs==='number' ? toMs : (state.mode==='stopwatch' ? 0 : 25*60*1000);
+        save(); render();
+      }
+
+      // Simple chime using Web Audio (no external assets)
+      function chime(){
+        if(state.muted) return;
+        try{
+          const ctx = new (window.AudioContext||window.webkitAudioContext)();
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.connect(g); g.connect(ctx.destination);
+          o.type='sine'; o.frequency.value=880;
+          g.gain.setValueAtTime(0.001, ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime+0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.5);
+          o.start(); o.stop(ctx.currentTime+0.5);
+        }catch{}
+      }
+
+      let rafId = null;
+      function tick(){
+        cancelAnimationFrame(rafId);
+        const loop = ()=>{
+          if(state.running){
+            const now = Date.now();
+            if(state.mode==='stopwatch'){
+              // count up
+              state.remaining = Math.min(99*60*1000, state.remaining + 100); // cap 99m
+            } else {
+              const left = state.target - now;
+              state.remaining = Math.max(0, left);
+              if(left <= 0){
+                state.running = false;
+                chime();
+              }
+            }
+            render();
+            rafId = requestAnimationFrame(loop);
+          }
+        };
+        rafId = requestAnimationFrame(loop);
+      }
+
+      // Event wiring
+      segBtns.forEach(btn=>btn.addEventListener('click', ()=>{
+        setMode(btn.dataset.mode);
+      }));
+
+      $$('#pomodoroPanel .chip').forEach(chip=>chip.addEventListener('click', ()=>{
+        const m = Number(chip.dataset.min);
+        reset(m*60*1000); start();
+      }));
+
+      $('#setCustom').addEventListener('click', ()=>{
+        const m = Math.max(1, Number($('#customMin').value||10));
+        reset(m*60*1000); start();
+      });
+
+      startBtn.addEventListener('click', ()=>{
+        if(state.running) pause(); else start();
+        render();
+      });
+      resetBtn.addEventListener('click', ()=> reset());
+      muteBtn.addEventListener('click', ()=>{ state.muted=!state.muted; save(); render(); });
+
+      document.addEventListener('visibilitychange', ()=>{
+        if(document.visibilityState==='visible' && state.running && state.target){
+          state.remaining = Math.max(0, state.target - Date.now());
+          if(state.remaining===0) state.running=false;
+          render();
+        }
+      });
+
+      // Apply initial mode from URL or saved state
+      const urlMode = params.get('mode');
+      if(urlMode) state.mode = urlMode;
+      setMode(state.mode);
+
+      // If URL provided countdown=XX for countdown mode
+      const cdParam = params.get('countdown');
+      if(state.mode==='countdown' && cdParam){ reset(Number(cdParam)*60*1000); }
+
+      render();
+    })();
+  </script>
+</body>
+</html>
